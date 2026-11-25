@@ -102,10 +102,10 @@ def main() -> None:
         from _rca_shared import cases
         data_dir = Path(payload["data_dir"])
         cases.use(data_dir)                        # RCABench or RCA100, from the sandbox's tables
-        cases.set_question(payload.get("question", ""))
+        cases.set_question(payload.get("question", ""), payload.get("cairn_incident"))
         import run as gos           # noqa: E402  (chdir + GoS patches)
 
-        res = gos.run_case(data_dir, payload.get("question", ""))
+        res = gos.run_case(data_dir, payload.get("question", ""), cairn="cairn_incident" in payload)
         graph = res["graph"] or causal_graph(res["roots"], res["path"])
         result = {
             "output": json.dumps(graph, ensure_ascii=False),

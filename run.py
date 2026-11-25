@@ -450,14 +450,15 @@ def report_graph_of(report: dict | None, instances: list[str]) -> dict | None:
             "component_to_service": {}}
 
 
-def extract_answer(answer: str, report: str, graph: BeliefGraph, instances: list[str], alarm: str) -> dict:
+def extract_answer(answer: str, report: str, graph: BeliefGraph, instances: list[str], alarm: str, incident=None) -> dict:
+    case_context = incident or f"Alarmed service: {alarm}"
     hypos = [f"{n['label']} (confidence {n.get('score', 0):.2f})" for n in graph.nodes.values()
              if n.get("type") == "Hypothesis"]
     prompt = f"""A root-cause investigation of a microservice incident concluded:
 Final answer: {answer}
 Report: {report}
 Hypotheses considered (label, confidence): {hypos}
-Alarmed service: {alarm}
+{case_context}
 Services in the system: {instances}
 
 Map the conclusion to the benchmark's output format. Output ONLY JSON:
@@ -490,16 +491,16 @@ def load_configs() -> tuple[dict, dict]:
     return cfg_agent, cfg_belief
 
 
-def run_case(case_dir: Path, question: str) -> dict:
+def run_case(case_dir: Path, question: str, *, cairn=False) -> dict:
     """Run GoS on one case."""
     t0 = time.time()
     CTX.reset()
     cfg_agent, cfg_belief = load_configs()
     case_dir = Path(case_dir)
     name = case_dir.parent.name if case_dir.name == "converted" else case_dir.name
-    alarm = cases.alarm_of(case_dir)
+    alarm = "" if cairn else cases.alarm_of(case_dir)
     instances = cases.instances_of(case_dir)
-    symptom = symptom_text(case_dir, alarm)
+    symptom = question if cairn else symptom_text(case_dir, alarm)
     if GRAPH_SOURCE == "report":
         report_graph.configure(instances, alarm, SERVICE_STATES[cases.kind(case_dir)])
     resources = {"case_dir": case_dir, "alarm": alarm, "events": EV}
@@ -539,7 +540,7 @@ def run_case(case_dir: Path, question: str) -> dict:
     ext = {"roots": [], "path": [], "raw": ""}
     graph_from = "report" if final_graph else "none"
     if final_graph is None and (answer is not None or report is not None):
-        ext = extract_answer(answer, report, G, instances, alarm)
+        ext = extract_answer(answer, report, G, instances, alarm, question if cairn else None)
         graph_from = "extract_answer"
     with EV.scope(role="gos:runtime", parent=CTX.parent):
         EV.artifact("final_answer", {"answer": answer, "report": report, "graph": final_graph,
